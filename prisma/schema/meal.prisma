@@ -1,0 +1,21 @@
+model Meal {
+  id           String      @id @default(uuid())
+  providerId   String
+  categoryId   String
+  title        String
+  description  String?
+  price        Decimal     @db.Decimal(10, 2)
+  imageUrl     String?
+  isAvailable  Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  provider     User        @relation("ProviderMeals", fields: [providerId], references: [id], onDelete: Cascade)
+  category     Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  reviews      Review[]
+  cartItems    CartItem[]
+  orderItems   OrderItem[]
+
+  @@index([providerId])
+  @@index([categoryId])
+}

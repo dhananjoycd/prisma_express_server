@@ -1,0 +1,33 @@
+model Order {
+  id               String        @id @default(uuid())
+  customerId       String
+  totalAmount      Decimal       @db.Decimal(10, 2)
+  paymentMethod    PaymentMethod @default(COD)
+  paymentStatus    PaymentStatus @default(UNPAID)
+  status           OrderStatus   @default(PENDING)
+  deliveryAddress  String
+  note             String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  customer         User          @relation("CustomerOrders", fields: [customerId], references: [id], onDelete: Restrict)
+  items            OrderItem[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  mealId     String
+  quantity   Int      @default(1)
+  unitPrice  Decimal  @db.Decimal(10, 2)
+  subTotal   Decimal  @db.Decimal(10, 2)
+
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  meal       Meal     @relation(fields: [mealId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([mealId])
+}

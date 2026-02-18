@@ -1,0 +1,22 @@
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  emailVerified Boolean   @default(false)
+  image        String?
+  password     String?
+  phone        String?
+  address      String?
+  role         UserRole   @default(CUSTOMER)
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  meals        Meal[]     @relation("ProviderMeals")
+  orders       Order[]    @relation("CustomerOrders")
+  reviews      Review[]
+  cartItems    CartItem[]
+  sessions     Session[]
+  accounts     Account[]
+  providerProfile ProviderProfile?
+}
