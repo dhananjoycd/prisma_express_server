@@ -4,6 +4,7 @@ import { CartRoutes } from "../modules/cart/cart.routes";
 import { CategoryRoutes } from "../modules/category/category.routes";
 import { MealRoutes } from "../modules/meal/meal.routes";
 import { OrderRoutes } from "../modules/order/order.routes";
+import { PaymentRoutes } from "../modules/payment/payment.routes";
 import { ProviderRoutes } from "../modules/provider/provider.routes";
 import { ReviewRoutes } from "../modules/review/review.routes";
 import { UserRoutes } from "../modules/user/user.routes";
@@ -17,6 +18,7 @@ router.use("/meals", MealRoutes);
 router.use("/providers", ProviderRoutes);
 router.use("/cart", CartRoutes);
 router.use("/orders", OrderRoutes);
+router.use("/payments", PaymentRoutes);
 router.use("/reviews", ReviewRoutes);
 
 export default router;
