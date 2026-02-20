@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { UserRole, UserStatus } from "../../generated/prisma/enums.js";
-import { auth as betterAuth } from "../lib/better-auth";
+import { getAuth } from "../lib/better-auth";
 import { AppError } from "../utils/AppError";
 import { toFetchHeaders } from "../utils/http";
 
@@ -26,6 +26,7 @@ const toStatus = (status: unknown): UserStatus => {
 
 export const auth = (...roles: UserRole[]) => {
   return async (req: Request, _res: Response, next: NextFunction) => {
+    const betterAuth = await getAuth();
     const session = await betterAuth.api.getSession({
       headers: toFetchHeaders(req),
     });

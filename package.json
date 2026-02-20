@@ -7,6 +7,7 @@
     "dev": "npx tsx watch src/server.ts",
     "build": "npx tsc",
     "start": "node dist/src/server.js",
+    "postinstall": "npx prisma generate && npm run build",
     "seed:test-users": "npx tsx scripts/seed-test-users.ts",
     "seed:test-meals": "npx tsx scripts/seed-test-meals.ts",
     "seed:test-cart-orders": "npx tsx scripts/seed-test-cart-orders.ts",

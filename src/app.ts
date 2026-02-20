@@ -6,9 +6,18 @@ import router from "./routes";
 
 const app: Application = express();
 
+function sanitizeOrigin(value: string | undefined, fallback: string) {
+  const firstChunk = (value ?? fallback).split(",")[0] ?? fallback;
+  const firstLine = firstChunk.split(/\r?\n/)[0] ?? fallback;
+  const clean = firstLine.trim();
+  return clean || fallback;
+}
+
+const appUrl = sanitizeOrigin(process.env.APP_URL, "http://localhost:3000");
+
 app.use(
   cors({
-    origin: process.env.APP_URL || "http://localhost:3000",
+    origin: appUrl,
     credentials: true,
   }),
 );

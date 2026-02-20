@@ -1,6 +1,6 @@
 import { Request } from "express";
 import { UserRole, UserStatus } from "../../../generated/prisma/enums.js";
-import { auth } from "../../lib/better-auth";
+import { getAuth } from "../../lib/better-auth";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import { toFetchHeaders } from "../../utils/http";
@@ -72,6 +72,7 @@ export const AuthService = {
     }>
   > {
     const payload = registerSchema.parse(req.body);
+    const auth = await getAuth();
 
     const role = ensureRole(payload.role) ?? UserRole.CUSTOMER;
     const result = await auth.api.signUpEmail({
@@ -118,6 +119,7 @@ export const AuthService = {
     }>
   > {
     const payload = loginSchema.parse(req.body);
+    const auth = await getAuth();
 
     const result = await auth.api.signInEmail({
       headers: toFetchHeaders(req),
@@ -144,6 +146,7 @@ export const AuthService = {
   },
 
   async me(req: Request) {
+    const auth = await getAuth();
     const session = await auth.api.getSession({
       headers: toFetchHeaders(req),
     });
@@ -159,6 +162,7 @@ export const AuthService = {
   },
 
   async signOut(req: Request): Promise<AuthApiResponse<{ success: boolean }>> {
+    const auth = await getAuth();
     const result = await auth.api.signOut({
       headers: toFetchHeaders(req),
       returnHeaders: true,
@@ -182,6 +186,7 @@ export const AuthService = {
     }>
   > {
     const payload = socialLoginSchema.parse(req.body ?? {});
+    const auth = await getAuth();
 
     const result = await auth.api.signInSocial({
       headers: toFetchHeaders(req),
