@@ -1,4 +1,4 @@
-import { UserStatus } from "../../../generated/prisma/enums";
+import { UserStatus } from "../../../generated/prisma/enums.js";
 import { z } from "zod";
 
 export const updateMeSchema = z
@@ -15,3 +15,4 @@ export const updateMeSchema = z
 export const updateUserStatusSchema = z.object({
   status: z.enum([UserStatus.ACTIVE, UserStatus.SUSPENDED]),
 });
+

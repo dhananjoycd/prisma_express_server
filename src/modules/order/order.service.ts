@@ -1,11 +1,13 @@
-import { OrderStatus, UserRole } from "../../../generated/prisma/enums";
-import { Prisma } from "../../../generated/prisma/client";
+import { OrderStatus, UserRole } from "../../../generated/prisma/enums.js";
+import { Prisma } from "../../../generated/prisma/client.js";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 
 type CreateOrderPayload = {
   deliveryAddress: string;
   note?: string | undefined;
+  scheduleType?: "NOW" | "LATER" | undefined;
+  scheduledAt?: string | undefined;
 };
 
 const orderStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
@@ -32,6 +34,14 @@ export const OrderService = {
       throw new AppError("Cart is empty", 400);
     }
 
+    const providerIds = new Set(cartItems.map((item) => item.meal.providerId));
+    if (providerIds.size > 1) {
+      throw new AppError(
+        "You can order from one provider at a time. Please split your cart.",
+        400,
+      );
+    }
+
     const totalAmount = cartItems.reduce(
       (sum, item) => sum.plus(new Prisma.Decimal(item.meal.price).mul(item.quantity)),
       new Prisma.Decimal(0),
@@ -43,6 +53,8 @@ export const OrderService = {
           customerId,
           deliveryAddress: payload.deliveryAddress,
           totalAmount,
+          scheduleType: payload.scheduleType ?? "NOW",
+          ...(payload.scheduledAt ? { scheduledAt: new Date(payload.scheduledAt) } : {}),
           ...(payload.note !== undefined ? { note: payload.note } : {}),
           items: {
             create: cartItems.map((item) => {
@@ -120,7 +132,15 @@ export const OrderService = {
           select: { id: true, name: true, email: true },
         },
         items: {
-          include: { meal: true },
+          include: {
+            meal: {
+              include: {
+                provider: {
+                  select: { id: true, name: true },
+                },
+              },
+            },
+          },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -208,3 +228,4 @@ export const OrderService = {
     });
   },
 };
+

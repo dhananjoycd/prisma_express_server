@@ -1,0 +1,3 @@
+ALTER TABLE "Order"
+ADD COLUMN "scheduleType" TEXT NOT NULL DEFAULT 'NOW',
+ADD COLUMN "scheduledAt" TIMESTAMP(3);

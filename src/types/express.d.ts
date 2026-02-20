@@ -1,4 +1,4 @@
-import { UserRole, UserStatus } from "../../generated/prisma/enums";
+import { UserRole, UserStatus } from "../../generated/prisma/enums.js";
 
 declare global {
   namespace Express {
@@ -13,3 +13,4 @@ declare global {
 }
 
 export {};
+

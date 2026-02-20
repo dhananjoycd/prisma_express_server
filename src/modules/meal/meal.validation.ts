@@ -4,6 +4,7 @@ export const createMealSchema = z.object({
   categoryId: z.string().uuid(),
   title: z.string().trim().min(2),
   description: z.string().trim().optional(),
+  dietary: z.array(z.string().trim().min(1)).optional(),
   price: z.number().positive(),
   imageUrl: z.string().url().optional(),
   isAvailable: z.boolean().optional(),
@@ -14,6 +15,7 @@ export const updateMealSchema = z
     categoryId: z.string().uuid().optional(),
     title: z.string().trim().min(2).optional(),
     description: z.string().trim().optional(),
+    dietary: z.array(z.string().trim().min(1)).optional(),
     price: z.number().positive().optional(),
     imageUrl: z.string().url().optional(),
     isAvailable: z.boolean().optional(),
@@ -31,3 +33,4 @@ export const mealFilterSchema = z.object({
   page: z.number().int().positive().optional(),
   limit: z.number().int().positive().optional(),
 });
+

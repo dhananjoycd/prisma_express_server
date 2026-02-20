@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { UserRole } from "../../../generated/prisma/enums";
+import { UserRole } from "../../../generated/prisma/enums.js";
 import { auth } from "../../middlewares/auth";
 import { MealController } from "./meal.controller";
 
@@ -13,3 +13,4 @@ router.patch("/:id", auth(UserRole.PROVIDER, UserRole.ADMIN), MealController.upd
 router.delete("/:id", auth(UserRole.PROVIDER, UserRole.ADMIN), MealController.deleteMeal);
 
 export const MealRoutes = router;
+

@@ -33,3 +33,4 @@ export const applyFetchHeadersToExpress = (headers: Headers, res: Response) => {
     res.setHeader(key, value);
   });
 };
+

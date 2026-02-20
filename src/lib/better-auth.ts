@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { bearer } from "better-auth/plugins";
-import { UserRole, UserStatus } from "../../generated/prisma/enums";
+import { UserRole, UserStatus } from "../../generated/prisma/enums.js";
 import { prisma } from "./prisma";
 
 const appBaseUrl =
@@ -70,3 +70,4 @@ export const auth = betterAuth({
   },
   plugins: [bearer()],
 });
+

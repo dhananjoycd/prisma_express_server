@@ -35,3 +35,4 @@ export const errorHandler = (
     message: "Something went wrong",
   });
 };
+

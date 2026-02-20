@@ -17,3 +17,4 @@ router.all("/*path", (req, res) => {
 });
 
 export const AuthRoutes = router;
+

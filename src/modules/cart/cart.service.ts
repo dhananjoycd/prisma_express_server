@@ -1,4 +1,4 @@
-import { Prisma } from "../../../generated/prisma/client";
+import { Prisma } from "../../../generated/prisma/client.js";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 
@@ -49,6 +49,25 @@ export const CartService = {
     const meal = await prisma.meal.findUnique({ where: { id: payload.mealId } });
     if (!meal || !meal.isAvailable) {
       throw new AppError("Meal not available", 404);
+    }
+
+    const existingItems = await prisma.cartItem.findMany({
+      where: { customerId },
+      include: {
+        meal: {
+          select: { providerId: true },
+        },
+      },
+    });
+
+    const hasDifferentProvider = existingItems.some(
+      (item) => item.meal.providerId !== meal.providerId,
+    );
+    if (hasDifferentProvider) {
+      throw new AppError(
+        "You can order from one provider at a time. Please clear cart first.",
+        400,
+      );
     }
 
     const existing = await prisma.cartItem.findUnique({
@@ -119,3 +138,4 @@ export const CartService = {
     await prisma.cartItem.deleteMany({ where: { customerId } });
   },
 };
+

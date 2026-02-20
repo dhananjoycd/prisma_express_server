@@ -57,3 +57,4 @@ export const CategoryService = {
     return prisma.category.delete({ where: { id } });
   },
 };
+

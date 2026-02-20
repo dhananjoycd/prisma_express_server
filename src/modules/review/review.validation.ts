@@ -5,3 +5,4 @@ export const createReviewSchema = z.object({
   rating: z.number().int().min(1).max(5),
   comment: z.string().trim().optional(),
 });
+

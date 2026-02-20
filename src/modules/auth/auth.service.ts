@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { UserRole, UserStatus } from "../../../generated/prisma/enums";
+import { UserRole, UserStatus } from "../../../generated/prisma/enums.js";
 import { auth } from "../../lib/better-auth";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
@@ -209,3 +209,4 @@ export const AuthService = {
     };
   },
 };
+

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { UserRole } from "../../../generated/prisma/enums";
+import { UserRole } from "../../../generated/prisma/enums.js";
 import { auth } from "../../middlewares/auth";
 import { OrderController } from "./order.controller";
 
@@ -17,3 +17,4 @@ router.patch(
 );
 
 export const OrderRoutes = router;
+

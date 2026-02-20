@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UserRole } from "../../../generated/prisma/enums";
+import { UserRole } from "../../../generated/prisma/enums.js";
 
 const passwordSchema = z
   .string()
@@ -25,3 +25,4 @@ export const loginSchema = z.object({
 export const socialLoginSchema = z.object({
   callbackURL: z.string().url().optional(),
 });
+

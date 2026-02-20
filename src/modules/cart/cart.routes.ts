@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { UserRole } from "../../../generated/prisma/enums";
+import { UserRole } from "../../../generated/prisma/enums.js";
 import { auth } from "../../middlewares/auth";
 import { CartController } from "./cart.controller";
 
@@ -11,3 +11,4 @@ router.patch("/:id", auth(UserRole.CUSTOMER), CartController.updateCartItem);
 router.delete("/:id", auth(UserRole.CUSTOMER), CartController.removeCartItem);
 
 export const CartRoutes = router;
+

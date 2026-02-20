@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { UserRole } from "../../../generated/prisma/enums";
+import { UserRole } from "../../../generated/prisma/enums.js";
 import { auth } from "../../middlewares/auth";
 import { UserController } from "./user.controller";
 
@@ -11,3 +11,4 @@ router.get("/", auth(UserRole.ADMIN), UserController.getUsers);
 router.patch("/:id/status", auth(UserRole.ADMIN), UserController.updateStatus);
 
 export const UserRoutes = router;
+

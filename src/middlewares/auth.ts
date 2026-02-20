@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { UserRole, UserStatus } from "../../generated/prisma/enums";
+import { UserRole, UserStatus } from "../../generated/prisma/enums.js";
 import { auth as betterAuth } from "../lib/better-auth";
 import { AppError } from "../utils/AppError";
 import { toFetchHeaders } from "../utils/http";
@@ -54,3 +54,4 @@ export const auth = (...roles: UserRole[]) => {
     return next();
   };
 };
+

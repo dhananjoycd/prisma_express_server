@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { UserRole } from "../../../generated/prisma/enums";
+import { UserRole } from "../../../generated/prisma/enums.js";
 import { auth } from "../../middlewares/auth";
 import { ReviewController } from "./review.controller";
 
@@ -9,3 +9,4 @@ router.post("/", auth(UserRole.CUSTOMER), ReviewController.createReview);
 router.get("/meal/:mealId", ReviewController.getMealReviews);
 
 export const ReviewRoutes = router;
+

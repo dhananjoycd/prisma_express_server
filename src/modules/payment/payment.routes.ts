@@ -10,5 +10,10 @@ router.post(
   auth(UserRole.CUSTOMER),
   PaymentController.createCheckoutSession,
 );
+router.post(
+  "/stripe/confirm-session",
+  auth(UserRole.CUSTOMER),
+  PaymentController.confirmCheckoutSession,
+);
 
 export const PaymentRoutes = router;

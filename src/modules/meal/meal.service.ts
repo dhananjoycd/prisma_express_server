@@ -1,5 +1,5 @@
-import { UserRole } from "../../../generated/prisma/enums";
-import { Prisma } from "../../../generated/prisma/client";
+import { UserRole } from "../../../generated/prisma/enums.js";
+import { Prisma } from "../../../generated/prisma/client.js";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 
@@ -7,6 +7,7 @@ type CreateMealPayload = {
   categoryId: string;
   title: string;
   description?: string | undefined;
+  dietary?: string[] | undefined;
   price: number;
   imageUrl?: string | undefined;
   isAvailable?: boolean | undefined;
@@ -16,6 +17,7 @@ type UpdateMealPayload = {
   categoryId?: string | undefined;
   title?: string | undefined;
   description?: string | undefined;
+  dietary?: string[] | undefined;
   price?: number | undefined;
   imageUrl?: string | undefined;
   isAvailable?: boolean | undefined;
@@ -46,6 +48,7 @@ export const MealService = {
         title,
         price: new Prisma.Decimal(payload.price),
         ...(payload.description !== undefined ? { description: payload.description } : {}),
+        ...(payload.dietary !== undefined ? { dietary: payload.dietary } : {}),
         ...(payload.imageUrl !== undefined ? { imageUrl: payload.imageUrl } : {}),
         ...(payload.isAvailable !== undefined ? { isAvailable: payload.isAvailable } : {}),
       },
@@ -144,6 +147,7 @@ export const MealService = {
         ...(payload.categoryId !== undefined ? { categoryId: payload.categoryId } : {}),
         ...(payload.title !== undefined ? { title: payload.title } : {}),
         ...(payload.description !== undefined ? { description: payload.description } : {}),
+        ...(payload.dietary !== undefined ? { dietary: payload.dietary } : {}),
         ...(payload.price !== undefined ? { price: new Prisma.Decimal(payload.price) } : {}),
         ...(payload.imageUrl !== undefined ? { imageUrl: payload.imageUrl } : {}),
         ...(payload.isAvailable !== undefined ? { isAvailable: payload.isAvailable } : {}),
@@ -176,3 +180,4 @@ export const MealService = {
     });
   },
 };
+

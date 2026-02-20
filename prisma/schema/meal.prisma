@@ -4,6 +4,7 @@ model Meal {
   categoryId   String
   title        String
   description  String?
+  dietary      String[]    @default([])
   price        Decimal     @db.Decimal(10, 2)
   imageUrl     String?
   isAvailable  Boolean     @default(true)

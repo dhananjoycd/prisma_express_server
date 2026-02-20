@@ -1,4 +1,4 @@
-import { UserStatus } from "../../../generated/prisma/enums";
+import { UserStatus } from "../../../generated/prisma/enums.js";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 
@@ -27,6 +27,9 @@ export const UserService = {
         id: true,
         name: true,
         email: true,
+        phone: true,
+        address: true,
+        image: true,
         role: true,
         status: true,
         createdAt: true,
@@ -106,3 +109,4 @@ export const UserService = {
     });
   },
 };
+
