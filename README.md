@@ -1,38 +1,54 @@
-# FoodHub Server API
+# [FoodHub Server API](https://foodhub-server-api-sigma.vercel.app/)
 
-Backend API for **FoodHub** meal ordering platform with role-based access:
+Production-oriented backend for the FoodHub meal-ordering platform. This API supports customer ordering, provider meal management, admin controls, and Stripe checkout.
+
+## Roles
+
 - `CUSTOMER`
 - `PROVIDER`
 - `ADMIN`
 
-This server supports authentication, meal browsing, cart, ordering, reviews, provider discovery, and admin controls.
-
 ## Tech Stack
 
-- **Runtime:** Node.js
-- **Language:** TypeScript
-- **Framework:** Express.js
-- **Database:** PostgreSQL
-- **ORM:** Prisma
-- **Authentication:** Better Auth (email/password + Google OAuth start flow)
-- **Validation:** Zod
-- **Security:** Role-based route guards + account status checks
+- Runtime: Node.js
+- Language: TypeScript
+- Framework: Express.js
+- Database: PostgreSQL
+- ORM: Prisma
+- Auth: Better Auth + JWT/session flow
+- Validation: Zod
+- Payments: Stripe Checkout
 
-## Core Features
+## Features
 
-- Auth: register, login, logout, current user, Google sign-in start
-- Users: profile read/update, admin user list and suspend/activate
-- Categories: CRUD (admin write, public read)
-- Meals: public browse/details + provider/admin meal management
-- Providers: public provider list and provider details with menu
-- Cart: customer add/update/remove/list
-- Orders:
-  - customer create + own orders
-  - provider incoming orders
-  - admin all orders
-  - order details by id with access control
-  - guarded status transitions + customer pending cancel
-- Reviews: customer review (only after delivered order), public meal reviews
+- Authentication
+  - Register/login/logout
+  - Current user profile
+  - Google login entrypoint
+- User Management
+  - `GET/PATCH /users/me`
+  - Admin user list and account status update
+- Categories
+  - Public list
+  - Admin CRUD
+- Meals
+  - Public list/details/reviews
+  - Provider/Admin CRUD
+- Providers
+  - Public provider list and details
+- Cart
+  - Customer cart add/update/remove/list
+- Orders
+  - Customer order creation + own orders
+  - Provider incoming orders
+  - Admin all orders
+  - Role-aware order detail and status update
+- Payments
+  - Stripe checkout session create
+  - Stripe session confirmation and paid-order finalize
+- Reviews
+  - Customer review submission
+  - Public meal review list
 
 ## Project Structure
 
@@ -44,16 +60,19 @@ src/
   modules/
     auth/
     user/
-    provider/
     category/
     meal/
+    provider/
     cart/
     order/
+    payment/
     review/
   middlewares/
   lib/
+  utils/
 prisma/
   schema/
+  migrations/
 docs/
   api-test-data.md
   postman/
@@ -61,119 +80,49 @@ docs/
 
 ## Environment Variables
 
-Use `.env.example` as reference:
+Copy `.env.example` to `.env` and set values:
 
 ```env
 PORT=5000
 APP_URL=http://localhost:3000
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/foodhub?schema=public
+JWT_SECRET=change_me
 BETTER_AUTH_SECRET=change_me
 BETTER_AUTH_URL=http://localhost:5000
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
+GOOGLE_CLIENT_ID=your_google_oauth_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_SUCCESS_URL=http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}
+STRIPE_CANCEL_URL=http://localhost:3000/cart
 ```
 
-## Installation & Run
+## Getting Started
 
 ```bash
 npm install
-npm run prisma:migrate
 npm run prisma:generate
+npm run prisma:migrate
 npm run dev
 ```
 
-Build for production:
+API base URL:
+
+```txt
+http://localhost:5000/api/v1
+```
+
+Production API base URL:
+
+```txt
+https://foodhub-server-api-sigma.vercel.app/
+```
+
+## Production Build
 
 ```bash
 npm run build
 npm start
 ```
-
-## API Base URL
-
-`http://localhost:5000/api/v1`
-
-## How It Works
-
-1. **Authentication**
-   - Register/login through Better Auth APIs wrapped by custom controllers.
-   - On successful login, you receive a bearer token for protected routes.
-
-2. **Authorization**
-   - Custom `auth(...)` middleware reads session/user and enforces role checks.
-   - Suspended users are blocked automatically.
-
-3. **Business Rules**
-   - Only providers/admin can manage meals.
-   - Only customers can manage cart and create reviews.
-   - Reviews allowed only when a delivered order contains that meal.
-   - Order status transitions are validated to prevent illegal jumps.
-   - Customers can only cancel pending orders.
-
-## Example Requests
-
-### Register Customer
-
-```http
-POST /api/v1/auth/register
-Content-Type: application/json
-
-{
-  "name": "Customer One",
-  "email": "customer1@test.com",
-  "password": "Test@1234",
-  "role": "CUSTOMER"
-}
-```
-
-### Login
-
-```http
-POST /api/v1/auth/login
-Content-Type: application/json
-
-{
-  "email": "customer1@test.com",
-  "password": "Test@1234"
-}
-```
-
-### Create Meal (Provider)
-
-```http
-POST /api/v1/meals
-Authorization: Bearer <PROVIDER_SESSION_TOKEN>
-Content-Type: application/json
-
-{
-  "categoryId": "<CATEGORY_ID>",
-  "title": "Chicken Burger",
-  "price": 8.99
-}
-```
-
-### Update Order Status (Provider/Admin/Customer rules apply)
-
-```http
-PATCH /api/v1/orders/<ORDER_ID>/status
-Authorization: Bearer <TOKEN>
-Content-Type: application/json
-
-{
-  "status": "PREPARING"
-}
-```
-
-## Testing
-
-Use included Postman files:
-
-- `docs/postman/FoodHub-Assignment.postman_collection.json`
-- `docs/postman/FoodHub-Assignment.postman_environment.json`
-
-Also see:
-
-- `docs/api-test-data.md`
 
 ## Scripts
 
@@ -181,16 +130,56 @@ Also see:
 npm run dev
 npm run build
 npm run start
-npm run prisma:migrate
 npm run prisma:generate
+npm run prisma:migrate
 npm run prisma:validate
+npm run seed:test-users
+npm run seed:test-meals
+npm run seed:test-cart-orders
 ```
 
-## Admin Setup Note
+## Main Routes (Summary)
 
-Self-registration as admin is disabled. Promote a user manually in DB:
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/google-login`
+- `GET /auth/me`
+- `POST /auth/logout`
+- `GET/PATCH /users/me`
+- `GET /users` (admin)
+- `PATCH /users/:id/status` (admin)
+- `GET /categories`
+- `POST/PATCH/DELETE /categories` (admin)
+- `GET /meals`
+- `GET /meals/:id`
+- `POST/PATCH/DELETE /meals` (provider/admin)
+- `GET /providers`
+- `GET /providers/:id`
+- `GET/POST /cart` (customer)
+- `PATCH/DELETE /cart/:id` (customer)
+- `POST /orders` (customer)
+- `GET /orders/my` (customer)
+- `GET /orders/incoming` (provider)
+- `GET /orders` (admin)
+- `GET /orders/:id`
+- `PATCH /orders/:id/status`
+- `POST /payments/stripe/checkout-session` (customer)
+- `POST /payments/stripe/confirm-session` (customer)
+- `POST /reviews` (customer)
+- `GET /reviews/meal/:mealId`
+
+## Testing
+
+Use included Postman assets:
+
+- `docs/postman/FoodHub-Assignment.postman_collection.json`
+- `docs/postman/FoodHub-Assignment.postman_environment.json`
+- `docs/api-test-data.md`
+
+## Admin Promotion Note
+
+Self-registration as `ADMIN` is disabled. Promote through DB manually:
 
 ```sql
-UPDATE "User" SET role = 'ADMIN' WHERE email = 'customer1@test.com';
+UPDATE "User" SET role = 'ADMIN' WHERE email = 'your_admin_email@example.com';
 ```
-
