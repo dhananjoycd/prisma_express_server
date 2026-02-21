@@ -10,7 +10,7 @@ const makeSlug = (value: string) =>
     .replace(/-+/g, "-");
 
 export const CategoryService = {
-  async createCategory(payload: { name: string; description?: string | undefined }) {
+  async createCategory(payload: { name: string; description?: string | undefined; imageUrl?: string | undefined }) {
     if (!payload.name) {
       throw new AppError("Category name is required", 400);
     }
@@ -22,6 +22,7 @@ export const CategoryService = {
         name: payload.name,
         slug,
         ...(payload.description !== undefined ? { description: payload.description } : {}),
+        ...(payload.imageUrl !== undefined ? { imageUrl: payload.imageUrl } : {}),
       },
     });
   },
@@ -34,9 +35,9 @@ export const CategoryService = {
 
   async updateCategory(
     id: string,
-    payload: { name?: string | undefined; description?: string | undefined },
+    payload: { name?: string | undefined; description?: string | undefined; imageUrl?: string | undefined },
   ) {
-    const data: { name?: string; slug?: string; description?: string | null } = {};
+    const data: { name?: string; slug?: string; description?: string | null; imageUrl?: string | null } = {};
 
     if (payload.name !== undefined) {
       data.name = payload.name;
@@ -45,6 +46,9 @@ export const CategoryService = {
 
     if (payload.description !== undefined) {
       data.description = payload.description;
+    }
+    if (payload.imageUrl !== undefined) {
+      data.imageUrl = payload.imageUrl;
     }
 
     return prisma.category.update({
