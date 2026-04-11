@@ -1,4 +1,5 @@
 import { UserStatus } from "../../../generated/prisma/enums.js";
+import { Prisma } from "../../../generated/prisma/client.js";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 
@@ -21,21 +22,61 @@ export const UserService = {
     });
   },
 
-  async getUsers() {
-    return prisma.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        address: true,
-        image: true,
-        role: true,
-        status: true,
-        createdAt: true,
+  async getUsers(filters: {
+    page?: number | undefined;
+    limit?: number | undefined;
+    search?: string | undefined;
+    role?: "CUSTOMER" | "PROVIDER" | "ADMIN" | undefined;
+    status?: UserStatus | undefined;
+  }) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters.limit && filters.limit > 0 ? filters.limit : 20;
+
+    const where: Prisma.UserWhereInput = {};
+    if (filters.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: "insensitive" } },
+        { email: { contains: filters.search, mode: "insensitive" } },
+      ];
+    }
+
+    if (filters.role) {
+      where.role = filters.role;
+    }
+
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    const [data, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          address: true,
+          image: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return {
+      meta: {
+        page,
+        limit,
+        total,
       },
-      orderBy: { createdAt: "desc" },
-    });
+      data,
+    };
   },
 
   async getMe(userId: string) {
@@ -109,4 +150,3 @@ export const UserService = {
     });
   },
 };
-

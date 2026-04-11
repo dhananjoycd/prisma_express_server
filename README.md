@@ -92,6 +92,7 @@ BETTER_AUTH_URL=http://localhost:5000
 GOOGLE_CLIENT_ID=your_google_oauth_client_id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
 STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
 STRIPE_SUCCESS_URL=http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}
 STRIPE_CANCEL_URL=http://localhost:3000/cart
 ```
@@ -165,6 +166,7 @@ npm run seed:test-cart-orders
 - `PATCH /orders/:id/status`
 - `POST /payments/stripe/checkout-session` (customer)
 - `POST /payments/stripe/confirm-session` (customer)
+- `POST /payments/stripe/webhook` (Stripe server-to-server)
 - `POST /reviews` (customer)
 - `GET /reviews/meal/:mealId`
 

@@ -2,6 +2,7 @@ import { UserRole } from "../../../generated/prisma/enums.js";
 import { Prisma } from "../../../generated/prisma/client.js";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
+import { AuditService } from "../audit/audit.service";
 
 type CreateMealPayload = {
   categoryId: string;
@@ -41,18 +42,38 @@ export const MealService = {
       throw new AppError("categoryId, title and price are required", 400);
     }
 
-    return prisma.meal.create({
+    const createdMeal = await prisma.meal.create({
       data: {
         providerId,
         categoryId,
         title,
         price: new Prisma.Decimal(payload.price),
-        ...(payload.description !== undefined ? { description: payload.description } : {}),
+        ...(payload.description !== undefined
+          ? { description: payload.description }
+          : {}),
         ...(payload.dietary !== undefined ? { dietary: payload.dietary } : {}),
-        ...(payload.imageUrl !== undefined ? { imageUrl: payload.imageUrl } : {}),
-        ...(payload.isAvailable !== undefined ? { isAvailable: payload.isAvailable } : {}),
+        ...(payload.imageUrl !== undefined
+          ? { imageUrl: payload.imageUrl }
+          : {}),
+        ...(payload.isAvailable !== undefined
+          ? { isAvailable: payload.isAvailable }
+          : {}),
       },
     });
+
+    await AuditService.log({
+      actorId: providerId,
+      actorRole: UserRole.PROVIDER,
+      action: "MEAL_CREATED",
+      entityType: "MEAL",
+      entityId: createdMeal.id,
+      metadata: {
+        categoryId,
+        title,
+      },
+    });
+
+    return createdMeal;
   },
 
   async getMeals(filters: MealFilters) {
@@ -131,7 +152,12 @@ export const MealService = {
     return meal;
   },
 
-  async updateMeal(userId: string, role: UserRole, mealId: string, payload: UpdateMealPayload) {
+  async updateMeal(
+    userId: string,
+    role: UserRole,
+    mealId: string,
+    payload: UpdateMealPayload,
+  ) {
     const meal = await prisma.meal.findUnique({ where: { id: mealId } });
     if (!meal) {
       throw new AppError("Meal not found", 404);
@@ -141,18 +167,39 @@ export const MealService = {
       throw new AppError("Forbidden", 403);
     }
 
-    return prisma.meal.update({
+    const updatedMeal = await prisma.meal.update({
       where: { id: mealId },
       data: {
-        ...(payload.categoryId !== undefined ? { categoryId: payload.categoryId } : {}),
+        ...(payload.categoryId !== undefined
+          ? { categoryId: payload.categoryId }
+          : {}),
         ...(payload.title !== undefined ? { title: payload.title } : {}),
-        ...(payload.description !== undefined ? { description: payload.description } : {}),
+        ...(payload.description !== undefined
+          ? { description: payload.description }
+          : {}),
         ...(payload.dietary !== undefined ? { dietary: payload.dietary } : {}),
-        ...(payload.price !== undefined ? { price: new Prisma.Decimal(payload.price) } : {}),
-        ...(payload.imageUrl !== undefined ? { imageUrl: payload.imageUrl } : {}),
-        ...(payload.isAvailable !== undefined ? { isAvailable: payload.isAvailable } : {}),
+        ...(payload.price !== undefined
+          ? { price: new Prisma.Decimal(payload.price) }
+          : {}),
+        ...(payload.imageUrl !== undefined
+          ? { imageUrl: payload.imageUrl }
+          : {}),
+        ...(payload.isAvailable !== undefined
+          ? { isAvailable: payload.isAvailable }
+          : {}),
       },
     });
+
+    await AuditService.log({
+      actorId: userId,
+      actorRole: role,
+      action: "MEAL_UPDATED",
+      entityType: "MEAL",
+      entityId: mealId,
+      metadata: payload as unknown as Prisma.InputJsonValue,
+    });
+
+    return updatedMeal;
   },
 
   async deleteMeal(userId: string, role: UserRole, mealId: string) {
@@ -166,6 +213,14 @@ export const MealService = {
     }
 
     await prisma.meal.delete({ where: { id: mealId } });
+
+    await AuditService.log({
+      actorId: userId,
+      actorRole: role,
+      action: "MEAL_DELETED",
+      entityType: "MEAL",
+      entityId: mealId,
+    });
   },
 
   async getMealReviews(mealId: string) {
@@ -180,4 +235,3 @@ export const MealService = {
     });
   },
 };
-

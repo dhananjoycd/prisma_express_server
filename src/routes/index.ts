@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { AuthRoutes } from "../modules/auth/auth.routes";
+import { AuditRoutes } from "../modules/audit/audit.routes";
 import { CartRoutes } from "../modules/cart/cart.routes";
 import { CategoryRoutes } from "../modules/category/category.routes";
 import { MealRoutes } from "../modules/meal/meal.routes";
@@ -12,6 +13,7 @@ import { UserRoutes } from "../modules/user/user.routes";
 const router = Router();
 
 router.use("/auth", AuthRoutes);
+router.use("/audit-logs", AuditRoutes);
 router.use("/users", UserRoutes);
 router.use("/categories", CategoryRoutes);
 router.use("/meals", MealRoutes);

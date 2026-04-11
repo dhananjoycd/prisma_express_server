@@ -21,6 +21,10 @@ app.use(
     credentials: true,
   }),
 );
+app.use(
+  "/api/v1/payments/stripe/webhook",
+  express.raw({ type: "application/json" }),
+);
 app.use(express.json());
 
 app.get("/", (_req, res) => {
@@ -33,4 +37,3 @@ app.use(notFound);
 app.use(errorHandler);
 
 export default app;
-

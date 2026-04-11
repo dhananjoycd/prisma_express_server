@@ -19,11 +19,41 @@ const orderStatusTransitions: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.CANCELED]: [],
 };
 
+const resolveScheduledAt = (payload: CreateOrderPayload) => {
+  const scheduleType = payload.scheduleType ?? "NOW";
+
+  if (scheduleType !== "LATER") {
+    return undefined;
+  }
+
+  if (!payload.scheduledAt?.trim()) {
+    throw new AppError(
+      "scheduledAt is required when scheduleType is LATER",
+      400,
+    );
+  }
+
+  const scheduledAt = new Date(payload.scheduledAt);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    throw new AppError("scheduledAt must be a valid datetime", 400);
+  }
+
+  if (scheduledAt.getTime() <= Date.now()) {
+    throw new AppError("scheduledAt must be in the future", 400);
+  }
+
+  return scheduledAt;
+};
+
 export const OrderService = {
   async createOrder(customerId: string, payload: CreateOrderPayload) {
-    if (!payload.deliveryAddress) {
+    const deliveryAddress = payload.deliveryAddress?.trim();
+    if (!deliveryAddress) {
       throw new AppError("deliveryAddress is required", 400);
     }
+
+    const scheduledAt = resolveScheduledAt(payload);
+    const note = payload.note?.trim() || undefined;
 
     const cartItems = await prisma.cartItem.findMany({
       where: { customerId },
@@ -43,7 +73,8 @@ export const OrderService = {
     }
 
     const totalAmount = cartItems.reduce(
-      (sum, item) => sum.plus(new Prisma.Decimal(item.meal.price).mul(item.quantity)),
+      (sum, item) =>
+        sum.plus(new Prisma.Decimal(item.meal.price).mul(item.quantity)),
       new Prisma.Decimal(0),
     );
 
@@ -51,11 +82,11 @@ export const OrderService = {
       const createdOrder = await tx.order.create({
         data: {
           customerId,
-          deliveryAddress: payload.deliveryAddress,
+          deliveryAddress,
           totalAmount,
           scheduleType: payload.scheduleType ?? "NOW",
-          ...(payload.scheduledAt ? { scheduledAt: new Date(payload.scheduledAt) } : {}),
-          ...(payload.note !== undefined ? { note: payload.note } : {}),
+          ...(scheduledAt ? { scheduledAt } : {}),
+          ...(note ? { note } : {}),
           items: {
             create: cartItems.map((item) => {
               const unitPrice = new Prisma.Decimal(item.meal.price);
@@ -86,65 +117,135 @@ export const OrderService = {
     return order;
   },
 
-  async getMyOrders(customerId: string) {
-    return prisma.order.findMany({
-      where: { customerId },
-      include: {
-        items: {
-          include: {
-            meal: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-  },
+  async getMyOrders(
+    customerId: string,
+    filters: {
+      status?: OrderStatus | undefined;
+      page?: number | undefined;
+      limit?: number | undefined;
+    },
+  ) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters.limit && filters.limit > 0 ? filters.limit : 20;
 
-  async getIncomingOrders(providerId: string) {
-    return prisma.order.findMany({
-      where: {
-        items: {
-          some: {
-            meal: {
-              providerId,
+    const where: Prisma.OrderWhereInput = {
+      customerId,
+      ...(filters.status ? { status: filters.status } : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          items: {
+            include: {
+              meal: true,
             },
           },
         },
-      },
-      include: {
-        customer: {
-          select: { id: true, name: true, email: true },
-        },
-        items: {
-          include: {
-            meal: true,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    return {
+      meta: { page, limit, total },
+      data,
+    };
+  },
+
+  async getIncomingOrders(
+    providerId: string,
+    filters: {
+      status?: OrderStatus | undefined;
+      page?: number | undefined;
+      limit?: number | undefined;
+    },
+  ) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters.limit && filters.limit > 0 ? filters.limit : 20;
+
+    const where: Prisma.OrderWhereInput = {
+      items: {
+        some: {
+          meal: {
+            providerId,
           },
         },
       },
-      orderBy: { createdAt: "desc" },
-    });
+      ...(filters.status ? { status: filters.status } : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          customer: {
+            select: { id: true, name: true, email: true },
+          },
+          items: {
+            include: {
+              meal: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    return {
+      meta: { page, limit, total },
+      data,
+    };
   },
 
-  async getAllOrders() {
-    return prisma.order.findMany({
-      include: {
-        customer: {
-          select: { id: true, name: true, email: true },
-        },
-        items: {
-          include: {
-            meal: {
-              include: {
-                provider: {
-                  select: { id: true, name: true },
+  async getAllOrders(filters: {
+    status?: OrderStatus | undefined;
+    page?: number | undefined;
+    limit?: number | undefined;
+  }) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit = filters.limit && filters.limit > 0 ? filters.limit : 20;
+
+    const where: Prisma.OrderWhereInput = {
+      ...(filters.status ? { status: filters.status } : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.order.findMany({
+        where,
+        include: {
+          customer: {
+            select: { id: true, name: true, email: true },
+          },
+          items: {
+            include: {
+              meal: {
+                include: {
+                  provider: {
+                    select: { id: true, name: true },
+                  },
                 },
               },
             },
           },
         },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.order.count({ where }),
+    ]);
+
+    return {
+      meta: { page, limit, total },
+      data,
+    };
   },
 
   async getOrderById(userId: string, role: UserRole, orderId: string) {
@@ -176,7 +277,9 @@ export const OrderService = {
       return order;
     }
 
-    const hasOwnedMeal = order.items.some((item) => item.meal.providerId === userId);
+    const hasOwnedMeal = order.items.some(
+      (item) => item.meal.providerId === userId,
+    );
     if (!hasOwnedMeal) {
       throw new AppError("Forbidden", 403);
     }
@@ -184,7 +287,12 @@ export const OrderService = {
     return order;
   },
 
-  async updateOrderStatus(userId: string, role: UserRole, orderId: string, status: OrderStatus) {
+  async updateOrderStatus(
+    userId: string,
+    role: UserRole,
+    orderId: string,
+    status: OrderStatus,
+  ) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -201,7 +309,9 @@ export const OrderService = {
     }
 
     if (role === UserRole.PROVIDER) {
-      const hasOwnedMeal = order.items.some((item) => item.meal.providerId === userId);
+      const hasOwnedMeal = order.items.some(
+        (item) => item.meal.providerId === userId,
+      );
       if (!hasOwnedMeal) {
         throw new AppError("Forbidden", 403);
       }
@@ -212,13 +322,19 @@ export const OrderService = {
         throw new AppError("Forbidden", 403);
       }
 
-      if (order.status !== OrderStatus.PENDING || status !== OrderStatus.CANCELED) {
+      if (
+        order.status !== OrderStatus.PENDING ||
+        status !== OrderStatus.CANCELED
+      ) {
         throw new AppError("Customers can only cancel pending orders", 403);
       }
     } else {
       const allowed = orderStatusTransitions[order.status] ?? [];
       if (!allowed.includes(status)) {
-        throw new AppError(`Invalid status transition from ${order.status} to ${status}`, 400);
+        throw new AppError(
+          `Invalid status transition from ${order.status} to ${status}`,
+          400,
+        );
       }
     }
 
@@ -228,4 +344,3 @@ export const OrderService = {
     });
   },
 };
-

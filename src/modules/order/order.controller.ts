@@ -3,7 +3,12 @@ import { AppError } from "../../utils/AppError";
 import { catchAsync } from "../../utils/catchAsync";
 import { getRequiredParam } from "../../utils/request";
 import { OrderService } from "./order.service";
-import { createOrderSchema, updateOrderStatusSchema } from "./order.validation";
+import {
+  createOrderSchema,
+  orderListQuerySchema,
+  updateOrderStatusSchema,
+} from "./order.validation";
+import { AuditService } from "../audit/audit.service";
 
 export const OrderController = {
   createOrder: catchAsync(async (req: Request, res: Response) => {
@@ -22,34 +27,73 @@ export const OrderController = {
   getMyOrders: catchAsync(async (req: Request, res: Response) => {
     if (!req.user) throw new AppError("Unauthorized", 401);
 
-    const result = await OrderService.getMyOrders(req.user.userId);
+    const filters = orderListQuerySchema.parse({
+      page:
+        typeof req.query.page === "string" ? Number(req.query.page) : undefined,
+      limit:
+        typeof req.query.limit === "string"
+          ? Number(req.query.limit)
+          : undefined,
+      status:
+        typeof req.query.status === "string" ? req.query.status : undefined,
+    });
+
+    const result = await OrderService.getMyOrders(req.user.userId, filters);
 
     res.status(200).json({
       success: true,
       message: "Orders retrieved successfully",
-      data: result,
+      meta: result.meta,
+      data: result.data,
     });
   }),
 
   getIncomingOrders: catchAsync(async (req: Request, res: Response) => {
     if (!req.user) throw new AppError("Unauthorized", 401);
 
-    const result = await OrderService.getIncomingOrders(req.user.userId);
+    const filters = orderListQuerySchema.parse({
+      page:
+        typeof req.query.page === "string" ? Number(req.query.page) : undefined,
+      limit:
+        typeof req.query.limit === "string"
+          ? Number(req.query.limit)
+          : undefined,
+      status:
+        typeof req.query.status === "string" ? req.query.status : undefined,
+    });
+
+    const result = await OrderService.getIncomingOrders(
+      req.user.userId,
+      filters,
+    );
 
     res.status(200).json({
       success: true,
       message: "Incoming orders retrieved successfully",
-      data: result,
+      meta: result.meta,
+      data: result.data,
     });
   }),
 
-  getAllOrders: catchAsync(async (_req: Request, res: Response) => {
-    const result = await OrderService.getAllOrders();
+  getAllOrders: catchAsync(async (req: Request, res: Response) => {
+    const filters = orderListQuerySchema.parse({
+      page:
+        typeof req.query.page === "string" ? Number(req.query.page) : undefined,
+      limit:
+        typeof req.query.limit === "string"
+          ? Number(req.query.limit)
+          : undefined,
+      status:
+        typeof req.query.status === "string" ? req.query.status : undefined,
+    });
+
+    const result = await OrderService.getAllOrders(filters);
 
     res.status(200).json({
       success: true,
       message: "All orders retrieved successfully",
-      data: result,
+      meta: result.meta,
+      data: result.data,
     });
   }),
 
@@ -57,7 +101,11 @@ export const OrderController = {
     if (!req.user) throw new AppError("Unauthorized", 401);
 
     const id = getRequiredParam(req.params.id, "Order id");
-    const result = await OrderService.getOrderById(req.user.userId, req.user.role, id);
+    const result = await OrderService.getOrderById(
+      req.user.userId,
+      req.user.role,
+      id,
+    );
 
     res.status(200).json({
       success: true,
@@ -73,7 +121,22 @@ export const OrderController = {
 
     const { status } = updateOrderStatusSchema.parse(req.body);
 
-    const result = await OrderService.updateOrderStatus(req.user.userId, req.user.role, id, status);
+    const result = await OrderService.updateOrderStatus(
+      req.user.userId,
+      req.user.role,
+      id,
+      status,
+    );
+    await AuditService.log({
+      actorId: req.user.userId,
+      actorRole: req.user.role,
+      action: "ORDER_STATUS_UPDATED",
+      entityType: "ORDER",
+      entityId: id,
+      metadata: {
+        status,
+      },
+    });
 
     res.status(200).json({
       success: true,
@@ -82,4 +145,3 @@ export const OrderController = {
     });
   }),
 };
-

@@ -16,3 +16,10 @@ export const updateUserStatusSchema = z.object({
   status: z.enum([UserStatus.ACTIVE, UserStatus.SUSPENDED]),
 });
 
+export const userListQuerySchema = z.object({
+  page: z.number().int().positive().optional(),
+  limit: z.number().int().positive().max(100).optional(),
+  search: z.string().trim().optional(),
+  role: z.enum(["CUSTOMER", "PROVIDER", "ADMIN"]).optional(),
+  status: z.enum([UserStatus.ACTIVE, UserStatus.SUSPENDED]).optional(),
+});

@@ -5,6 +5,7 @@ import { PaymentController } from "./payment.controller";
 
 const router = Router();
 
+router.post("/stripe/webhook", PaymentController.handleStripeWebhook);
 router.post(
   "/stripe/checkout-session",
   auth(UserRole.CUSTOMER),
