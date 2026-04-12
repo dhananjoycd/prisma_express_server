@@ -1,4 +1,4 @@
-import { UserRole, UserStatus } from "../../generated/prisma/enums.js";
+import { UserRole, UserStatus } from "../../generated/prisma/enums";
 import { env, parseOriginList } from "./env";
 import { prisma } from "./prisma";
 

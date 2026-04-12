@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import { env } from "./env";
 
 type JsonOptions = {
@@ -9,29 +8,58 @@ type JsonOptions = {
   cacheTtlMs?: number;
 };
 
-const hasLlmConfig = Boolean(env.LLM_API_KEY?.trim());
-
-const client = hasLlmConfig
-  ? new OpenAI({
-      apiKey: env.LLM_API_KEY,
-      ...(env.LLM_BASE_URL ? { baseURL: env.LLM_BASE_URL } : {}),
-    })
-  : null;
-
-const model = env.LLM_MODEL || "gpt-4o-mini";
-const timeout = env.LLM_TIMEOUT_MS ?? 12000;
-const isGeminiModel = /gemini/i.test(model);
-const isGeminiBase = /generativelanguage\.googleapis\.com/i.test(
-  env.LLM_BASE_URL ?? "",
-);
-const useNativeJsonMode = !(isGeminiModel || isGeminiBase);
-
-type CacheEntry = {
-  expiresAt: number;
-  value: unknown;
+export type AssistantMeta = {
+  source: "gemini" | "local";
+  label: "Rayna GV2.5" | "Rayna LV1.1";
+  model: string;
 };
 
-const cache = new Map<string, CacheEntry>();
+type CachedValue = {
+  expiresAt: number;
+  value: unknown;
+  assistant: AssistantMeta;
+};
+
+type GeminiRequestResult = {
+  text: string | null;
+  model: string | null;
+};
+
+const GEMINI_LABEL = "Rayna GV2.5";
+const LOCAL_LABEL = "Rayna LV1.1";
+const DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite";
+
+const geminiApiKey = env.GEMINI_API_KEY?.trim() || env.LLM_API_KEY?.trim() || "";
+const geminiPrimaryModel =
+  env.GEMINI_MODEL?.trim() || env.LLM_MODEL?.trim() || DEFAULT_GEMINI_MODEL;
+const geminiConfiguredModels = (env.GEMINI_MODELS?.split(",") ?? [])
+  .map((item) => item.trim())
+  .filter(Boolean);
+const geminiModels = Array.from(
+  new Set([geminiPrimaryModel, ...geminiConfiguredModels]),
+);
+const hasGeminiConfig = Boolean(geminiApiKey);
+const timeoutMs = env.GEMINI_TIMEOUT_MS ?? env.LLM_TIMEOUT_MS ?? 12000;
+
+const LOCAL_ASSISTANT_META: AssistantMeta = {
+  source: "local",
+  label: LOCAL_LABEL,
+  model: "local-fallback",
+};
+
+const normalizeBaseUrl = (raw?: string) => {
+  const trimmed = raw?.trim();
+  if (!trimmed) return DEFAULT_GEMINI_BASE_URL;
+
+  return trimmed
+    .replace(/\/openai\/?$/i, "")
+    .replace(/\/+$/, "");
+};
+
+const geminiBaseUrl = normalizeBaseUrl(env.GEMINI_BASE_URL ?? env.LLM_BASE_URL);
+
+const cache = new Map<string, CachedValue>();
 const defaultCacheTtlMs = 5 * 60 * 1000;
 const maxCacheEntries = 200;
 
@@ -88,9 +116,98 @@ const pruneCache = () => {
   }
 };
 
+const extractGeminiText = (payload: unknown) => {
+  if (!payload || typeof payload !== "object") return null;
+
+  const candidates = (payload as { candidates?: unknown[] }).candidates;
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return null;
+  }
+
+  const parts = (
+    candidates[0] as {
+      content?: { parts?: Array<{ text?: string }> };
+    }
+  ).content?.parts;
+
+  if (!Array.isArray(parts)) {
+    return null;
+  }
+
+  return parts
+    .map((part) => (typeof part.text === "string" ? part.text : ""))
+    .join("")
+    .trim();
+};
+
+async function requestGeminiJson(
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens: number,
+  temperature: number,
+): Promise<GeminiRequestResult> {
+  if (!hasGeminiConfig || !geminiApiKey) {
+    return { text: null, model: null };
+  }
+
+  for (const model of geminiModels) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(
+        `${geminiBaseUrl}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: systemPrompt }],
+            },
+            contents: [
+              {
+                role: "user",
+                parts: [{ text: userPrompt }],
+              },
+            ],
+            generationConfig: {
+              temperature,
+              maxOutputTokens: Math.min(Math.max(Math.trunc(maxTokens), 96), 1400),
+              responseMimeType: "application/json",
+            },
+          }),
+          signal: controller.signal,
+        },
+      );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const payload = (await response.json()) as unknown;
+      const text = extractGeminiText(payload);
+      if (text) {
+        return { text, model };
+      }
+    } catch {
+      // Try the next configured model.
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  return { text: null, model: null };
+}
+
 export const LlmService = {
   isEnabled() {
-    return client !== null;
+    return hasGeminiConfig;
+  },
+
+  localAssistant() {
+    return LOCAL_ASSISTANT_META;
   },
 
   async json<T>({
@@ -99,14 +216,17 @@ export const LlmService = {
     maxTokens = 600,
     temperature = 0.2,
     cacheTtlMs = defaultCacheTtlMs,
-  }: JsonOptions): Promise<T | null> {
-    if (!client) {
-      return null;
+  }: JsonOptions): Promise<{ data: T | null; assistant: AssistantMeta }> {
+    if (!hasGeminiConfig) {
+      return {
+        data: null,
+        assistant: LOCAL_ASSISTANT_META,
+      };
     }
 
     const cacheKey = hashString(
       JSON.stringify({
-        model,
+        models: geminiModels,
         systemPrompt,
         userPrompt,
         maxTokens,
@@ -116,77 +236,89 @@ export const LlmService = {
     const now = Date.now();
     const cached = cache.get(cacheKey);
     if (cached && cached.expiresAt > now) {
-      return cached.value as T;
+      return {
+        data: cached.value as T,
+        assistant: cached.assistant,
+      };
     }
 
-    const tryCompletion = async (attempt: 1 | 2) => {
+    const tryPrompt = async (attempt: 1 | 2) => {
       const strictSystemPrompt =
         attempt === 1
           ? systemPrompt
           : `${systemPrompt}\n\nSTRICT MODE: return exactly one valid JSON object only. No markdown, no prose.`;
 
-      const completion = await client.chat.completions.create(
-        {
-          model,
-          temperature: attempt === 1 ? temperature : 0,
-          max_tokens: Math.min(
-            Math.max(Math.trunc(maxTokens) + (attempt === 2 ? 140 : 0), 96),
-            1400,
-          ),
-          ...(useNativeJsonMode
-            ? { response_format: { type: "json_object" as const } }
-            : {}),
-          messages: [
-            { role: "system", content: strictSystemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-        },
-        {
-          timeout,
-        },
+      return requestGeminiJson(
+        strictSystemPrompt,
+        userPrompt,
+        maxTokens + (attempt === 2 ? 140 : 0),
+        attempt === 1 ? temperature : 0,
       );
-
-      return completion.choices[0]?.message?.content ?? null;
     };
 
     try {
-      const firstRaw = await tryCompletion(1);
-      if (firstRaw) {
-        const firstNormalized = extractJsonObject(firstRaw);
+      const firstAttempt = await tryPrompt(1);
+      if (firstAttempt.text) {
+        const normalized = extractJsonObject(firstAttempt.text);
         try {
-          const value = JSON.parse(firstNormalized) as T;
+          const value = JSON.parse(normalized) as T;
+          const assistant: AssistantMeta = {
+            source: "gemini",
+            label: GEMINI_LABEL,
+            model: firstAttempt.model ?? geminiPrimaryModel,
+          };
+
           if (cacheTtlMs > 0) {
             cache.set(cacheKey, {
               expiresAt: now + cacheTtlMs,
               value,
+              assistant,
             });
             pruneCache();
           }
-          return value;
+
+          return {
+            data: value,
+            assistant,
+          };
         } catch {
-          // Try one strict retry.
+          // Retry once with a stricter prompt.
         }
       }
 
-      const secondRaw = await tryCompletion(2);
-      if (!secondRaw) {
-        return null;
+      const secondAttempt = await tryPrompt(2);
+      if (!secondAttempt.text) {
+        return {
+          data: null,
+          assistant: LOCAL_ASSISTANT_META,
+        };
       }
 
-      const secondNormalized = extractJsonObject(secondRaw);
-      const value = JSON.parse(secondNormalized) as T;
+      const value = JSON.parse(extractJsonObject(secondAttempt.text)) as T;
+      const assistant: AssistantMeta = {
+        source: "gemini",
+        label: GEMINI_LABEL,
+        model: secondAttempt.model ?? geminiPrimaryModel,
+      };
 
       if (cacheTtlMs > 0) {
         cache.set(cacheKey, {
           expiresAt: now + cacheTtlMs,
           value,
+          assistant,
         });
         pruneCache();
       }
 
-      return value;
+      return {
+        data: value,
+        assistant,
+      };
     } catch {
-      return null;
+      return {
+        data: null,
+        assistant: LOCAL_ASSISTANT_META,
+      };
     }
   },
 };

@@ -1,4 +1,4 @@
-import { UserStatus } from "../../../generated/prisma/enums.js";
+import { UserStatus } from "../../../generated/prisma/enums";
 import { z } from "zod";
 
 export const updateMeSchema = z

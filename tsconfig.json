@@ -43,12 +43,13 @@
         "esModuleInterop": true,
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "scripts/**/*",
+    "generated/prisma/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "generated/prisma"
+    "dist"
   ]
 }
 

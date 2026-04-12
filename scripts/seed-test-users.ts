@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { UserRole } from "../generated/prisma/enums.js";
-import { auth } from "../src/lib/better-auth";
+import { UserRole } from "../generated/prisma/enums";
+import { getAuth } from "../src/lib/better-auth";
 import { prisma } from "../src/lib/prisma";
 
 type SeedUser = {
@@ -87,6 +87,7 @@ const seedUsers: SeedUser[] = [
 
 const seed = async () => {
   const headers = new Headers();
+  const auth = await getAuth();
   let createdCount = 0;
   let updatedCount = 0;
 
@@ -142,7 +143,9 @@ const seed = async () => {
     }
   }
 
-  console.log(`Seed complete. Created: ${createdCount}, Updated: ${updatedCount}`);
+  console.log(
+    `Seed complete. Created: ${createdCount}, Updated: ${updatedCount}`,
+  );
 };
 
 seed()

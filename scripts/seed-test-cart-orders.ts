@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { OrderStatus } from "../generated/prisma/enums.js";
-import { Prisma } from "../generated/prisma/client.js";
+import { OrderStatus } from "../generated/prisma/enums";
+import { Prisma } from "../generated/prisma/client";
 import { prisma } from "../src/lib/prisma";
 
 type SeedCart = {

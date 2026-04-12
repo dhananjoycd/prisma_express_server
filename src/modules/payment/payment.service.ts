@@ -1,6 +1,6 @@
 import Stripe from "stripe";
-import { PaymentStatus } from "../../../generated/prisma/enums.js";
-import { Prisma } from "../../../generated/prisma/client.js";
+import { PaymentStatus } from "../../../generated/prisma/enums";
+import { Prisma } from "../../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import { AuditService } from "../audit/audit.service";

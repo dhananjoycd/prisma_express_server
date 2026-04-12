@@ -95,10 +95,11 @@ STRIPE_SECRET_KEY=sk_test_xxx
 STRIPE_WEBHOOK_SECRET=whsec_xxx
 STRIPE_SUCCESS_URL=http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}
 STRIPE_CANCEL_URL=http://localhost:3000/cart
-LLM_API_KEY=
-LLM_MODEL=gpt-4o-mini
-LLM_BASE_URL=
-LLM_TIMEOUT_MS=12000
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_MODELS=gemini-2.5-flash-lite,gemini-2.5-flash,gemini-2.5-pro
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+GEMINI_TIMEOUT_MS=12000
 ```
 
 ## Generative AI Behavior
@@ -106,7 +107,8 @@ LLM_TIMEOUT_MS=12000
 FoodHub uses a hybrid AI strategy:
 
 - Rule/heuristic logic is always available.
-- Generative AI is optional and enabled only when `LLM_API_KEY` is set.
+- Real Gemini generation is enabled when `GEMINI_API_KEY` is set.
+- If Gemini is unavailable, local fallback logic responds automatically.
 
 Current GenAI-enhanced areas:
 
@@ -146,6 +148,12 @@ npm run prisma:migrate
 npm run dev
 ```
 
+For local auto-reload while editing:
+
+```bash
+npm run dev:watch
+```
+
 API base URL:
 
 ```txt
@@ -169,6 +177,7 @@ npm start
 
 ```bash
 npm run dev
+npm run dev:watch
 npm run build
 npm run start
 npm run prisma:generate
@@ -178,6 +187,9 @@ npm run seed:test-users
 npm run seed:test-meals
 npm run seed:test-cart-orders
 ```
+
+`npm run dev` now runs a fresh TypeScript build and then starts the compiled server.
+Use `npm run dev:watch` only when you specifically want hot reload support.
 
 ## Main Routes (Summary)
 
@@ -189,6 +201,12 @@ npm run seed:test-cart-orders
 - `GET/PATCH /users/me`
 - `GET /users` (admin)
 - `PATCH /users/:id/status` (admin)
+
+## Google OAuth Configuration
+
+- Frontend callback after login: `http://localhost:3000/auth/callback`
+- Google authorized JavaScript origin: `http://localhost:3000`
+- Google authorized redirect URI: `http://localhost:5000/api/v1/auth/callback/google`
 - `GET /categories`
 - `POST/PATCH/DELETE /categories` (admin)
 - `GET /meals`

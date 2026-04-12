@@ -22,6 +22,15 @@ const envSchema = z
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
     STRIPE_SUCCESS_URL: z.string().optional(),
     STRIPE_CANCEL_URL: z.string().optional(),
+    GEMINI_API_KEY: z.string().optional(),
+    GEMINI_MODEL: z.string().optional(),
+    GEMINI_MODELS: z.string().optional(),
+    GEMINI_BASE_URL: z.string().url().optional(),
+    GEMINI_TIMEOUT_MS: z
+      .string()
+      .regex(/^\d+$/, "GEMINI_TIMEOUT_MS must be a number")
+      .optional()
+      .transform((value) => (value ? Number(value) : undefined)),
     LLM_API_KEY: z.string().optional(),
     LLM_MODEL: z.string().optional(),
     LLM_BASE_URL: z.string().url().optional(),

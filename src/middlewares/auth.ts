@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { UserRole, UserStatus } from "../../generated/prisma/enums.js";
+import { UserRole, UserStatus } from "../../generated/prisma/enums";
 import { getAuth } from "../lib/better-auth";
 import { AppError } from "../utils/AppError";
 import { toFetchHeaders } from "../utils/http";

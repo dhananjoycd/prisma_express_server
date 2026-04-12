@@ -1,6 +1,6 @@
-import { Prisma } from "../../../generated/prisma/client.js";
+import { Prisma } from "../../../generated/prisma/client";
 import { z } from "zod";
-import { LlmService } from "../../lib/llm";
+import { LlmService, type AssistantMeta } from "../../lib/llm";
 import { prisma } from "../../lib/prisma";
 
 type RecommendMealsParams = {
@@ -88,6 +88,13 @@ type LlmSupportChat = {
   escalate?: boolean;
 };
 
+type LlmRecommendationRerank = {
+  picks?: Array<{
+    id?: string;
+    reason?: string;
+  }>;
+};
+
 type ReviewTheme = {
   label: string;
   positiveKeywords: string[];
@@ -111,6 +118,29 @@ type AiMealReviewSummary = {
     sentiment: "positive" | "negative";
   }>;
   recommendation: string;
+};
+
+type RecommendationItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  dietary: string[];
+  imageUrl: string | null;
+  price: number;
+  rating: number;
+  reviewCount: number;
+  score: number;
+  signal: RecommendationSignal;
+  reason: string;
+  provider: {
+    id: string;
+    name: string;
+  };
+  category: {
+    id: string;
+    name: string;
+    slug: string;
+  };
 };
 
 const llmMealSearchSchema = z.object({
@@ -141,6 +171,18 @@ const llmSupportSchema = z.object({
   intent: z.string().min(2).max(40).optional(),
   suggestions: z.array(z.string().min(2).max(120)).max(3).optional(),
   escalate: z.boolean().optional(),
+});
+
+const llmRecommendationSchema = z.object({
+  picks: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        reason: z.string().min(6).max(180).optional(),
+      }),
+    )
+    .max(8)
+    .optional(),
 });
 
 const decimalToNumber = (
@@ -347,8 +389,38 @@ const asNullableNumber = (value: unknown) => {
   return parsed;
 };
 
+const buildLocalAssistant = () => LlmService.localAssistant();
+
+const buildRecommendationItem = ({
+  meal,
+  score,
+  signal,
+  reason,
+}: ScoredRecommendation): RecommendationItem => ({
+  id: meal.id,
+  title: meal.title,
+  description: meal.description,
+  dietary: meal.dietary,
+  imageUrl: meal.imageUrl,
+  price: decimalToNumber(meal.price),
+  rating: Number(average(meal.reviews.map((review) => review.rating)).toFixed(1)),
+  reviewCount: meal.reviews.length,
+  score: Number(score.toFixed(2)),
+  signal,
+  reason,
+  provider: {
+    id: meal.provider.id,
+    name: meal.provider.name,
+  },
+  category: {
+    id: meal.category.id,
+    name: meal.category.name,
+    slug: meal.category.slug,
+  },
+});
+
 const parseMealSearchQueryWithLlm = async (query: string) => {
-  const json = await LlmService.json<LlmParsedMealSearch>({
+  const { data, assistant } = await LlmService.json<LlmParsedMealSearch>({
     systemPrompt:
       "You are a strict parser for a food app. Return valid JSON only with keys: terms (string[]), minPrice (number|null), maxPrice (number|null), intents ({budget,premium,healthy,spicy,sweet,proteinRich} booleans). Use null for unknown prices and false for unknown intents. Do not add extra keys or markdown.",
     userPrompt: `User search query: ${query}`,
@@ -357,26 +429,37 @@ const parseMealSearchQueryWithLlm = async (query: string) => {
     cacheTtlMs: 10 * 60 * 1000,
   });
 
-  if (!json) return null;
+  if (!data) {
+    return {
+      parsed: null,
+      assistant,
+    };
+  }
 
-  const validated = llmMealSearchSchema.safeParse(json);
+  const validated = llmMealSearchSchema.safeParse(data);
   if (!validated.success) {
-    return null;
+    return {
+      parsed: null,
+      assistant: buildLocalAssistant(),
+    };
   }
 
   const intents = validated.data.intents ?? {};
   return {
-    terms: sanitizeTerms(validated.data.terms),
-    minPrice: asNullableNumber(validated.data.minPrice),
-    maxPrice: asNullableNumber(validated.data.maxPrice),
-    intents: {
-      budget: boolOrFallback(intents.budget, false),
-      premium: boolOrFallback(intents.premium, false),
-      healthy: boolOrFallback(intents.healthy, false),
-      spicy: boolOrFallback(intents.spicy, false),
-      sweet: boolOrFallback(intents.sweet, false),
-      proteinRich: boolOrFallback(intents.proteinRich, false),
+    parsed: {
+      terms: sanitizeTerms(validated.data.terms),
+      minPrice: asNullableNumber(validated.data.minPrice),
+      maxPrice: asNullableNumber(validated.data.maxPrice),
+      intents: {
+        budget: boolOrFallback(intents.budget, false),
+        premium: boolOrFallback(intents.premium, false),
+        healthy: boolOrFallback(intents.healthy, false),
+        spicy: boolOrFallback(intents.spicy, false),
+        sweet: boolOrFallback(intents.sweet, false),
+        proteinRich: boolOrFallback(intents.proteinRich, false),
+      },
     },
+    assistant,
   };
 };
 
@@ -518,6 +601,79 @@ const summarizeMealReviews = (meal: {
   };
 };
 
+const rerankRecommendationsWithGemini = async (
+  candidates: RecommendationItem[],
+  context: {
+    userId?: string;
+    mealId?: string;
+    targetPrice: number;
+    preferredCategories: Array<{ id: string; weight: number }>;
+    preferredProviders: Array<{ id: string; weight: number }>;
+  },
+) => {
+  const { data, assistant } = await LlmService.json<LlmRecommendationRerank>({
+    systemPrompt:
+      "You rerank meal recommendations for a food marketplace. Return valid JSON only with key picks, where picks is an ordered array of objects with id and short reason. Prefer high-rated meals that match user history, similar meal context, and reasonable price fit. Use only candidate IDs provided. Do not invent IDs or fields.",
+    userPrompt: JSON.stringify({
+      context,
+      candidates: candidates.slice(0, 8).map((item) => ({
+        id: item.id,
+        title: item.title,
+        price: item.price,
+        rating: item.rating,
+        reviewCount: item.reviewCount,
+        signal: item.signal,
+        category: item.category.name,
+        provider: item.provider.name,
+        reason: item.reason,
+      })),
+    }),
+    maxTokens: 420,
+    temperature: 0.15,
+    cacheTtlMs: 10 * 60 * 1000,
+  });
+
+  if (!data) {
+    return {
+      items: candidates,
+      assistant,
+    };
+  }
+
+  const validated = llmRecommendationSchema.safeParse(data);
+  if (!validated.success || !Array.isArray(validated.data.picks)) {
+    return {
+      items: candidates,
+      assistant: buildLocalAssistant(),
+    };
+  }
+
+  const byId = new Map(candidates.map((item) => [item.id, item]));
+  const pickedIds = new Set<string>();
+  const reranked: RecommendationItem[] = [];
+
+  for (const pick of validated.data.picks) {
+    const candidate = byId.get(pick.id);
+    if (!candidate || pickedIds.has(candidate.id)) continue;
+    pickedIds.add(candidate.id);
+    reranked.push({
+      ...candidate,
+      reason: pick.reason?.trim() || candidate.reason,
+    });
+  }
+
+  for (const candidate of candidates) {
+    if (!pickedIds.has(candidate.id)) {
+      reranked.push(candidate);
+    }
+  }
+
+  return {
+    items: reranked.slice(0, candidates.length),
+    assistant,
+  };
+};
+
 export const AiService = {
   async recommendMeals(params: RecommendMealsParams) {
     const limit = clampLimit(params.limit);
@@ -628,8 +784,7 @@ export const AiService = {
 
     const targetPrice = average(observedPrices);
     const seedDietary = seedMeal?.dietary ?? [];
-
-    return meals
+    const rankedItems = meals
       .map<ScoredRecommendation>((meal) => {
         let score = 0;
         let signal: RecommendationSignal = "popular_pick";
@@ -710,58 +865,63 @@ export const AiService = {
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
-      .map(({ meal, score, signal, reason }) => ({
-        id: meal.id,
-        title: meal.title,
-        description: meal.description,
-        dietary: meal.dietary,
-        imageUrl: meal.imageUrl,
-        price: decimalToNumber(meal.price),
-        rating: Number(
-          average(meal.reviews.map((review) => review.rating)).toFixed(1),
-        ),
-        reviewCount: meal.reviews.length,
-        score: Number(score.toFixed(2)),
-        signal,
-        reason,
-        provider: {
-          id: meal.provider.id,
-          name: meal.provider.name,
-        },
-        category: {
-          id: meal.category.id,
-          name: meal.category.name,
-          slug: meal.category.slug,
-        },
-      }));
+      .map(buildRecommendationItem);
+
+    const reranked = await rerankRecommendationsWithGemini(rankedItems, {
+      ...(params.userId ? { userId: params.userId } : {}),
+      ...(params.mealId ? { mealId: params.mealId } : {}),
+      targetPrice: Number(targetPrice.toFixed(2)),
+      preferredCategories: Array.from(preferredCategories.entries())
+        .map(([id, weight]) => ({ id, weight }))
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, 5),
+      preferredProviders: Array.from(preferredProviders.entries())
+        .map(([id, weight]) => ({ id, weight }))
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, 5),
+    });
+
+    return {
+      assistant:
+        reranked.items.length > 0 ? reranked.assistant : buildLocalAssistant(),
+      items: reranked.items,
+    };
   },
 
   async searchMealsByNaturalLanguage(params: MealSearchParams) {
     const limit = clampLimit(params.limit);
     const parsedQuery = parseMealSearchQuery(params.query);
     const llmParsed = await parseMealSearchQueryWithLlm(params.query);
-    const mergedParsedQuery: ParsedMealSearchQuery = llmParsed
+    const mergedParsedQuery: ParsedMealSearchQuery = llmParsed.parsed
       ? {
           normalizedQuery: parsedQuery.normalizedQuery,
           terms: Array.from(
-            new Set([...parsedQuery.terms, ...llmParsed.terms]),
+            new Set([...parsedQuery.terms, ...llmParsed.parsed.terms]),
           ),
-          minPrice: llmParsed.minPrice ?? parsedQuery.minPrice,
-          maxPrice: llmParsed.maxPrice ?? parsedQuery.maxPrice,
+          minPrice: llmParsed.parsed.minPrice ?? parsedQuery.minPrice,
+          maxPrice: llmParsed.parsed.maxPrice ?? parsedQuery.maxPrice,
           intents: {
-            budget: parsedQuery.intents.budget || llmParsed.intents.budget,
-            premium: parsedQuery.intents.premium || llmParsed.intents.premium,
-            healthy: parsedQuery.intents.healthy || llmParsed.intents.healthy,
-            spicy: parsedQuery.intents.spicy || llmParsed.intents.spicy,
-            sweet: parsedQuery.intents.sweet || llmParsed.intents.sweet,
+            budget:
+              parsedQuery.intents.budget || llmParsed.parsed.intents.budget,
+            premium:
+              parsedQuery.intents.premium || llmParsed.parsed.intents.premium,
+            healthy:
+              parsedQuery.intents.healthy || llmParsed.parsed.intents.healthy,
+            spicy: parsedQuery.intents.spicy || llmParsed.parsed.intents.spicy,
+            sweet: parsedQuery.intents.sweet || llmParsed.parsed.intents.sweet,
             proteinRich:
-              parsedQuery.intents.proteinRich || llmParsed.intents.proteinRich,
+              parsedQuery.intents.proteinRich ||
+              llmParsed.parsed.intents.proteinRich,
           },
         }
       : parsedQuery;
+    const assistant = llmParsed.parsed
+      ? llmParsed.assistant
+      : buildLocalAssistant();
 
     if (!mergedParsedQuery.normalizedQuery) {
       return {
+        assistant,
         query: params.query,
         interpreted: {
           terms: [],
@@ -1077,6 +1237,7 @@ export const AiService = {
       }));
 
     return {
+      assistant,
       query: params.query,
       interpreted: {
         terms: mergedParsedQuery.terms,
@@ -1137,12 +1298,15 @@ export const AiService = {
       cacheTtlMs: 15 * 60 * 1000,
     });
 
-    const validatedSummary = llmSummary
-      ? llmReviewSummarySchema.safeParse(llmSummary)
+    const validatedSummary = llmSummary.data
+      ? llmReviewSummarySchema.safeParse(llmSummary.data)
       : null;
     const stableSummary = validatedSummary?.success
       ? validatedSummary.data
       : null;
+    const assistant = stableSummary
+      ? llmSummary.assistant
+      : buildLocalAssistant();
 
     const mergedSummary = {
       ...summary,
@@ -1161,6 +1325,7 @@ export const AiService = {
     };
 
     return {
+      assistant,
       ...mergedSummary,
       meal: {
         id: meal.id,
@@ -1184,7 +1349,7 @@ export const AiService = {
         intent: "unknown",
         suggestions: ["How to login?", "How to track my order?"],
         escalate: false,
-        source: "rules",
+        assistant: buildLocalAssistant(),
       } as const;
     }
 
@@ -1201,7 +1366,7 @@ export const AiService = {
             "Login works on API but not browser",
           ],
           escalate: false,
-          source: "rules",
+          assistant: buildLocalAssistant(),
         } as const;
       }
 
@@ -1216,7 +1381,7 @@ export const AiService = {
             "How to retry payment",
           ],
           escalate: true,
-          source: "rules",
+          assistant: buildLocalAssistant(),
         } as const;
       }
 
@@ -1231,7 +1396,7 @@ export const AiService = {
             "Can I cancel my order?",
           ],
           escalate: false,
-          source: "rules",
+          assistant: buildLocalAssistant(),
         } as const;
       }
 
@@ -1245,7 +1410,7 @@ export const AiService = {
           "How to become a provider",
         ],
         escalate: false,
-        source: "rules",
+        assistant: buildLocalAssistant(),
       } as const;
     };
 
@@ -1261,7 +1426,7 @@ export const AiService = {
       cacheTtlMs: 2 * 60 * 1000,
     });
 
-    const validatedChat = llm ? llmSupportSchema.safeParse(llm) : null;
+    const validatedChat = llm.data ? llmSupportSchema.safeParse(llm.data) : null;
     const stableChat = validatedChat?.success ? validatedChat.data : null;
 
     if (!stableChat?.reply) {
@@ -1277,7 +1442,7 @@ export const AiService = {
             .slice(0, 3)
         : [],
       escalate: stableChat.escalate === true,
-      source: "llm",
+      assistant: llm.assistant,
     } as const;
   },
 };

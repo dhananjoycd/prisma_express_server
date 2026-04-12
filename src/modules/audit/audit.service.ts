@@ -1,5 +1,5 @@
-import { UserRole } from "../../../generated/prisma/enums.js";
-import { Prisma } from "../../../generated/prisma/client.js";
+import { UserRole } from "../../../generated/prisma/enums";
+import { Prisma } from "../../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 
 type CreateAuditLogPayload = {

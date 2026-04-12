@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { UserRole } from "../../../generated/prisma/enums.js";
+import { UserRole } from "../../../generated/prisma/enums";
 
 const passwordSchema = z
   .string()

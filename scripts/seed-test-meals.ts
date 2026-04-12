@@ -20,7 +20,7 @@ type ProviderMealSeed = {
     imageUrl?: string;
     isAvailable?: boolean;
   }>;
-};
+}; 
 
 const categories: SeedCategory[] = [
   { name: "Biryani", slug: "biryani", description: "Traditional and modern biryani dishes" },
@@ -153,12 +153,16 @@ const seed = async () => {
       where: { slug: category.slug },
       update: {
         name: category.name,
-        description: category.description,
+        ...(category.description !== undefined
+          ? { description: category.description }
+          : {}),
       },
       create: {
         name: category.name,
         slug: category.slug,
-        description: category.description,
+        ...(category.description !== undefined
+          ? { description: category.description }
+          : {}),
       },
       select: { id: true, slug: true },
     });
@@ -213,8 +217,8 @@ const seed = async () => {
             description: meal.description,
             dietary: meal.dietary,
             price: meal.price,
-            imageUrl: meal.imageUrl,
             isAvailable: meal.isAvailable ?? true,
+            ...(meal.imageUrl !== undefined ? { imageUrl: meal.imageUrl } : {}),
           },
         });
         updated += 1;
@@ -227,8 +231,8 @@ const seed = async () => {
             description: meal.description,
             dietary: meal.dietary,
             price: meal.price,
-            imageUrl: meal.imageUrl,
             isAvailable: meal.isAvailable ?? true,
+            ...(meal.imageUrl !== undefined ? { imageUrl: meal.imageUrl } : {}),
           },
         });
         created += 1;

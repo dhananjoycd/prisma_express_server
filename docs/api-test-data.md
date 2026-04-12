@@ -62,6 +62,14 @@ POST `/auth/google-login`
 
 Response returns Google OAuth URL. Redirect browser to that URL to complete login.
 
+Google Cloud Console setup:
+- Authorized JavaScript origins: `http://localhost:3000`
+- Authorized redirect URIs: `http://localhost:5000/api/v1/auth/callback/google`
+
+Google Cloud Console setup:
+- Authorized JavaScript origins: `http://localhost:3000`
+- Authorized redirect URIs: `http://localhost:5000/api/v1/auth/callback/google`
+
 ## 3) Create Admin (one-time, for admin routes)
 
 You cannot self-register as ADMIN from API.

@@ -1,6 +1,7 @@
 import { Request } from "express";
-import { UserRole, UserStatus } from "../../../generated/prisma/enums.js";
+import { UserRole, UserStatus } from "../../../generated/prisma/enums";
 import { getAuth } from "../../lib/better-auth";
+import { env, parseOriginList } from "../../lib/env";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../utils/AppError";
 import { toFetchHeaders } from "../../utils/http";
@@ -62,6 +63,30 @@ const assertRecordUser = (value: unknown) => {
   }
 
   return value as { user: Record<string, unknown> };
+};
+
+const trustedAppOrigins = parseOriginList(env.APP_URL);
+
+const buildDefaultCallbackUrl = () => `${trustedAppOrigins[0]}/auth/callback`;
+
+const resolveSocialCallbackUrl = (value?: string) => {
+  if (!value) {
+    return buildDefaultCallbackUrl();
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value);
+  } catch {
+    throw new AppError("Invalid social login callback URL", 400);
+  }
+
+  const normalizedOrigin = parsedUrl.origin.replace(/\/+$/, "");
+  if (!trustedAppOrigins.includes(normalizedOrigin)) {
+    throw new AppError("Untrusted social login callback URL", 400);
+  }
+
+  return value;
 };
 
 export const AuthService = {
@@ -187,12 +212,13 @@ export const AuthService = {
   > {
     const payload = socialLoginSchema.parse(req.body ?? {});
     const auth = await getAuth();
+    const callbackURL = resolveSocialCallbackUrl(payload.callbackURL);
 
     const result = await auth.api.signInSocial({
       headers: toFetchHeaders(req),
       body: {
         provider: "google",
-        callbackURL: payload.callbackURL,
+        callbackURL,
       },
       returnHeaders: true,
     });
