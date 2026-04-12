@@ -23,6 +23,21 @@ type CreateCheckoutPayload = {
   cancelUrl?: string | undefined;
 };
 
+type CheckoutSnapshotItem = {
+  mealId: string;
+  quantity: number;
+  unitPrice: string;
+};
+
+type CheckoutSnapshot = {
+  customerId: string;
+  deliveryAddress: string;
+  scheduleType: "NOW" | "LATER";
+  scheduledAt?: string;
+  note?: string;
+  items: CheckoutSnapshotItem[];
+};
+
 const resolveScheduledAt = (
   scheduleType: "NOW" | "LATER",
   scheduledAtRaw?: string,
@@ -50,6 +65,77 @@ const resolveScheduledAt = (
   return scheduledAt;
 };
 
+const buildCheckoutSnapshot = (
+  customerId: string,
+  deliveryAddress: string,
+  scheduleType: "NOW" | "LATER",
+  cartItems: Array<{ mealId: string; quantity: number; meal: { price: Prisma.Decimal | string | number } }>,
+  scheduledAt?: Date,
+  note?: string,
+): CheckoutSnapshot => ({
+  customerId,
+  deliveryAddress,
+  scheduleType,
+  ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
+  ...(note ? { note } : {}),
+  items: cartItems.map((item) => ({
+    mealId: item.mealId,
+    quantity: item.quantity,
+    unitPrice: new Prisma.Decimal(item.meal.price).toString(),
+  })),
+});
+
+const readCheckoutSnapshot = (value: unknown): CheckoutSnapshot | null => {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.customerId !== "string") return null;
+  if (typeof record.deliveryAddress !== "string") return null;
+  const scheduleType = record.scheduleType === "LATER" ? "LATER" : "NOW";
+  const itemsRaw = Array.isArray(record.items) ? record.items : [];
+  const items = itemsRaw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const entry = item as Record<string, unknown>;
+      const mealId = typeof entry.mealId === "string" ? entry.mealId : "";
+      const quantity = Number(entry.quantity ?? 0);
+      const unitPrice = typeof entry.unitPrice === "string" ? entry.unitPrice : String(entry.unitPrice ?? "");
+      if (!mealId || !Number.isFinite(quantity) || quantity < 1 || !unitPrice.trim()) {
+        return null;
+      }
+      return { mealId, quantity, unitPrice } satisfies CheckoutSnapshotItem;
+    })
+    .filter((item): item is CheckoutSnapshotItem => item !== null);
+
+  if (items.length === 0) return null;
+
+  return {
+    customerId: record.customerId,
+    deliveryAddress: record.deliveryAddress,
+    scheduleType,
+    ...(typeof record.scheduledAt === "string" ? { scheduledAt: record.scheduledAt } : {}),
+    ...(typeof record.note === "string" ? { note: record.note } : {}),
+    items,
+  };
+};
+
+async function findCheckoutSnapshot(
+  tx: Prisma.TransactionClient,
+  customerId: string,
+  sessionId: string,
+) {
+  const auditLog = await tx.auditLog.findFirst({
+    where: {
+      actorId: customerId,
+      action: "STRIPE_CHECKOUT_CREATED",
+      entityType: "PAYMENT",
+      entityId: sessionId,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return readCheckoutSnapshot(auditLog?.metadata);
+}
+
 export const PaymentService = {
   async createCheckoutSession(
     customerId: string,
@@ -64,6 +150,7 @@ export const PaymentService = {
 
     const scheduleType = payload.scheduleType === "LATER" ? "LATER" : "NOW";
     const scheduledAt = resolveScheduledAt(scheduleType, payload.scheduledAt);
+    const note = payload.note?.trim() || undefined;
 
     const cartItems = await prisma.cartItem.findMany({
       where: { customerId },
@@ -123,8 +210,26 @@ export const PaymentService = {
         deliveryAddress,
         scheduleType,
         ...(scheduledAt ? { scheduledAt: scheduledAt.toISOString() } : {}),
-        ...(payload.note?.trim() ? { note: payload.note.trim() } : {}),
+        ...(note ? { note } : {}),
       },
+    });
+
+    const snapshot = buildCheckoutSnapshot(
+      customerId,
+      deliveryAddress,
+      scheduleType,
+      cartItems,
+      scheduledAt,
+      note,
+    );
+
+    await AuditService.log({
+      actorId: customerId,
+      actorRole: "CUSTOMER",
+      action: "STRIPE_CHECKOUT_CREATED",
+      entityType: "PAYMENT",
+      entityId: session.id,
+      metadata: snapshot,
     });
 
     return {
@@ -160,8 +265,7 @@ export const PaymentService = {
     }
 
     const stripe = getStripeClient();
-    const session =
-      await stripe.checkout.sessions.retrieve(normalizedSessionId);
+    const session = await stripe.checkout.sessions.retrieve(normalizedSessionId);
 
     if (!session) {
       throw new AppError("Stripe session not found", 404);
@@ -212,26 +316,28 @@ export const PaymentService = {
         include: { meal: true },
       });
 
-      if (cartItems.length === 0) {
+      const itemsToCreate =
+        cartItems.length > 0
+          ? cartItems.map((item) => ({
+              mealId: item.mealId,
+              quantity: item.quantity,
+              unitPrice: new Prisma.Decimal(item.meal.price),
+            }))
+          : (await findCheckoutSnapshot(tx, customerId, normalizedSessionId))?.items.map((item) => ({
+              mealId: item.mealId,
+              quantity: item.quantity,
+              unitPrice: new Prisma.Decimal(item.unitPrice),
+            })) ?? [];
+
+      if (itemsToCreate.length === 0) {
         throw new AppError(
-          "Cart is empty and no order was found for this payment session",
+          "No checkout snapshot found for this payment session",
           409,
         );
       }
 
-      const providerIds = new Set(
-        cartItems.map((item) => item.meal.providerId),
-      );
-      if (providerIds.size > 1) {
-        throw new AppError(
-          "You can order from one provider at a time. Please split your cart.",
-          400,
-        );
-      }
-
-      const totalAmount = cartItems.reduce(
-        (sum, item) =>
-          sum.plus(new Prisma.Decimal(item.meal.price).mul(item.quantity)),
+      const totalAmount = itemsToCreate.reduce(
+        (sum, item) => sum.plus(item.unitPrice.mul(item.quantity)),
         new Prisma.Decimal(0),
       );
 
@@ -247,16 +353,12 @@ export const PaymentService = {
           ...(scheduledAt ? { scheduledAt } : {}),
           ...(note ? { note } : {}),
           items: {
-            create: cartItems.map((item) => {
-              const unitPrice = new Prisma.Decimal(item.meal.price);
-              const subTotal = unitPrice.mul(item.quantity);
-              return {
-                mealId: item.mealId,
-                quantity: item.quantity,
-                unitPrice,
-                subTotal,
-              };
-            }),
+            create: itemsToCreate.map((item) => ({
+              mealId: item.mealId,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              subTotal: item.unitPrice.mul(item.quantity),
+            })),
           },
         },
         include: {

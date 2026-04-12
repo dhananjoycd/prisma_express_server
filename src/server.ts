@@ -1,7 +1,8 @@
 import app from "./app";
+import { env } from "./lib/env";
 import { prisma } from "./lib/prisma";
 
-const PORT = process.env.PORT || 3000;
+const PORT = env.PORT;
 
 async function main() {
   try {
@@ -19,4 +20,3 @@ async function main() {
 }
 
 main();
-

@@ -1,23 +1,29 @@
 import cors from "cors";
 import express, { Application } from "express";
+import { env, parseOriginList } from "./lib/env";
 import { errorHandler } from "./middlewares/errorHandler";
 import { notFound } from "./middlewares/notFound";
 import router from "./routes";
 
 const app: Application = express();
-
-function sanitizeOrigin(value: string | undefined, fallback: string) {
-  const firstChunk = (value ?? fallback).split(",")[0] ?? fallback;
-  const firstLine = firstChunk.split(/\r?\n/)[0] ?? fallback;
-  const clean = firstLine.trim();
-  return clean || fallback;
-}
-
-const appUrl = sanitizeOrigin(process.env.APP_URL, "http://localhost:3000");
+const allowedOrigins = parseOriginList(env.APP_URL);
 
 app.use(
   cors({
-    origin: appUrl,
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const normalizedOrigin = origin.replace(/\/+$/, "");
+      if (allowedOrigins.includes(normalizedOrigin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    },
     credentials: true,
   }),
 );

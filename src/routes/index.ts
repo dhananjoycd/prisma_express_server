@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { AiRoutes } from "../modules/ai/ai.routes";
 import { AuthRoutes } from "../modules/auth/auth.routes";
 import { AuditRoutes } from "../modules/audit/audit.routes";
 import { CartRoutes } from "../modules/cart/cart.routes";
@@ -12,6 +13,7 @@ import { UserRoutes } from "../modules/user/user.routes";
 
 const router = Router();
 
+router.use("/ai", AiRoutes);
 router.use("/auth", AuthRoutes);
 router.use("/audit-logs", AuditRoutes);
 router.use("/users", UserRoutes);

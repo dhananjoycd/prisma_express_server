@@ -84,7 +84,7 @@ Copy `.env.example` to `.env` and set values:
 
 ```env
 PORT=5000
-APP_URL=http://localhost:3000
+APP_URL=http://localhost:3000,https://your-frontend-domain.com
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/foodhub?schema=public
 JWT_SECRET=change_me
 BETTER_AUTH_SECRET=change_me
@@ -95,7 +95,47 @@ STRIPE_SECRET_KEY=sk_test_xxx
 STRIPE_WEBHOOK_SECRET=whsec_xxx
 STRIPE_SUCCESS_URL=http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}
 STRIPE_CANCEL_URL=http://localhost:3000/cart
+LLM_API_KEY=
+LLM_MODEL=gpt-4o-mini
+LLM_BASE_URL=
+LLM_TIMEOUT_MS=12000
 ```
+
+## Generative AI Behavior
+
+FoodHub uses a hybrid AI strategy:
+
+- Rule/heuristic logic is always available.
+- Generative AI is optional and enabled only when `LLM_API_KEY` is set.
+
+Current GenAI-enhanced areas:
+
+- Meal natural language parsing (`GET /ai/search/meals`)
+- Meal review summary rewrite (`GET /ai/reviews/summary`)
+- Contact/support assistant (`POST /ai/support/chat`)
+
+## Fallback Policy
+
+If LLM is unavailable or returns invalid output:
+
+- Search falls back to deterministic parser and ranking.
+- Review summary falls back to heuristic summary.
+- Support chat falls back to intent-based rules.
+
+This ensures AI features do not block core ordering flows.
+
+## Cost and Stability Controls
+
+- Low token caps per use-case to reduce spend.
+- Short timeout via `LLM_TIMEOUT_MS`.
+- JSON-only response format with schema validation.
+- In-memory response cache for repeated prompts.
+
+Recommended production defaults:
+
+- Keep `LLM_MODEL` on a small-cost model for parsing/chat.
+- Use stricter prompts and low temperature for stable outputs.
+- Monitor latency and error rate for AI endpoints separately.
 
 ## Getting Started
 

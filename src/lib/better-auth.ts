@@ -1,25 +1,18 @@
 import { UserRole, UserStatus } from "../../generated/prisma/enums.js";
+import { env, parseOriginList } from "./env";
 import { prisma } from "./prisma";
 
 type BetterAuthInstance = {
   api: any;
 };
 
-const appBaseUrl =
-  process.env.BETTER_AUTH_URL ??
-  `http://localhost:${process.env.PORT ?? "5000"}`;
+const appBaseUrl = env.BETTER_AUTH_URL ?? `http://localhost:${env.PORT}`;
 
-function sanitizeOrigin(value: string | undefined, fallback: string) {
-  const firstChunk = (value ?? fallback).split(",")[0] ?? fallback;
-  const firstLine = firstChunk.split(/\r?\n/)[0] ?? fallback;
-  const clean = firstLine.trim();
-  return clean || fallback;
-}
+const trustedAppUrls = parseOriginList(env.APP_URL);
+const trustedOrigins = Array.from(new Set([...trustedAppUrls, appBaseUrl]));
 
-const trustedAppUrl = sanitizeOrigin(process.env.APP_URL, "http://localhost:3000");
-
-const googleClientId = process.env.GOOGLE_CLIENT_ID;
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const googleClientId = env.GOOGLE_CLIENT_ID;
+const googleClientSecret = env.GOOGLE_CLIENT_SECRET;
 
 let authInstancePromise: Promise<any> | null = null;
 
@@ -34,11 +27,11 @@ async function createAuthInstance(): Promise<any> {
     appName: "FoodHub",
     baseURL: appBaseUrl,
     basePath: "/api/v1/auth",
-    secret: process.env.BETTER_AUTH_SECRET ?? process.env.JWT_SECRET,
+    secret: env.BETTER_AUTH_SECRET ?? env.JWT_SECRET,
     database: prismaAdapter(prisma, {
       provider: "postgresql",
     }),
-    trustedOrigins: [trustedAppUrl, appBaseUrl],
+    trustedOrigins,
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
