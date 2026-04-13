@@ -102,6 +102,8 @@ GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 GEMINI_TIMEOUT_MS=12000
 ```
 
+For production Google login, keep the frontend origin first in `APP_URL`. The backend auth URL can stay in `BETTER_AUTH_URL`, but the default social callback should resolve to the frontend app, not the API host.
+
 ## Generative AI Behavior
 
 FoodHub uses a hybrid AI strategy:

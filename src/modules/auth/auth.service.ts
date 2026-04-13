@@ -65,9 +65,17 @@ const assertRecordUser = (value: unknown) => {
   return value as { user: Record<string, unknown> };
 };
 
+const appBaseUrl = env.BETTER_AUTH_URL ?? `http://localhost:${env.PORT}`;
 const trustedAppOrigins = parseOriginList(env.APP_URL);
+const appOrigin = appBaseUrl.replace(/\/+$/, "");
+const frontendOrigins = trustedAppOrigins.filter(
+  (origin) => origin !== appOrigin,
+);
 
-const buildDefaultCallbackUrl = () => `${trustedAppOrigins[0]}/auth/callback`;
+const buildDefaultCallbackUrl = () => {
+  const callbackOrigin = frontendOrigins[0] ?? trustedAppOrigins[0];
+  return `${callbackOrigin}/auth/callback`;
+};
 
 const resolveSocialCallbackUrl = (value?: string) => {
   if (!value) {
@@ -129,7 +137,8 @@ export const AuthService = {
       headers: result.headers,
       response: {
         token:
-          "token" in result.response && typeof result.response.token === "string"
+          "token" in result.response &&
+          typeof result.response.token === "string"
             ? result.response.token
             : null,
         user: sanitizedUser,
@@ -156,7 +165,8 @@ export const AuthService = {
     });
 
     const typed = assertRecordUser(result.response);
-    const token = "token" in result.response ? result.response.token : undefined;
+    const token =
+      "token" in result.response ? result.response.token : undefined;
     if (typeof token !== "string") {
       throw new AppError("Invalid auth response token", 500);
     }
@@ -240,4 +250,3 @@ export const AuthService = {
     };
   },
 };
-
