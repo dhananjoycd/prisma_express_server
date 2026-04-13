@@ -8,6 +8,8 @@ import router from "./routes";
 const app: Application = express();
 const allowedOrigins = parseOriginList(env.APP_URL);
 
+app.set("trust proxy", 1);
+
 app.use(
   cors({
     origin: (origin, callback) => {

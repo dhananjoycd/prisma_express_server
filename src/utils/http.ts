@@ -24,9 +24,19 @@ export const toFetchHeaders = (req: Request) => {
 };
 
 export const applyFetchHeadersToExpress = (headers: Headers, res: Response) => {
+  const getSetCookie = (
+    headers as Headers & { getSetCookie?: () => string[] }
+  ).getSetCookie;
+
+  if (typeof getSetCookie === "function") {
+    const cookies = getSetCookie.call(headers).filter(Boolean);
+    if (cookies.length > 0) {
+      res.setHeader("Set-Cookie", cookies);
+    }
+  }
+
   headers.forEach((value, key) => {
     if (APPEND_ONLY_RESPONSE_HEADERS.has(key.toLowerCase())) {
-      res.append(key, value);
       return;
     }
 
