@@ -7,6 +7,7 @@ type BetterAuthInstance = {
 };
 
 const appBaseUrl = env.BETTER_AUTH_URL ?? `http://localhost:${env.PORT}`;
+const isSecureOrigin = appBaseUrl.startsWith("https://");
 
 const trustedAppUrls = parseOriginList(env.APP_URL);
 const trustedOrigins = Array.from(new Set([...trustedAppUrls, appBaseUrl]));
@@ -32,6 +33,15 @@ async function createAuthInstance(): Promise<any> {
       provider: "postgresql",
     }),
     trustedOrigins,
+    advanced: {
+      useSecureCookies: isSecureOrigin,
+    },
+    defaultCookieAttributes: {
+      secure: isSecureOrigin,
+      sameSite: isSecureOrigin ? "none" : "lax",
+      httpOnly: true,
+      path: "/",
+    },
     emailAndPassword: {
       enabled: true,
       minPasswordLength: 8,
